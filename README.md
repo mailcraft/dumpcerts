@@ -6,5 +6,5 @@ Docker image for script https://github.com/containous/traefik/blob/master/contri
 ## Usage
 
 ```bash
-docker run --rm -v $PWD:/acme -w /acme mailcraft/dumpcerts dumpcerts acme.json ./
+docker run --rm -v $PWD:/acme -w /acme mailcraft/dumpcerts acme.json ./
 ```
