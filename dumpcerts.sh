@@ -4,7 +4,7 @@
 # dumpcerts.sh - A simple utility to explode a Traefik acme.json file into a
 #                directory of certificates and a private key
 #
-# Usage - dumpcerts.sh /etc/traefik/acme.json /etc/ssl/
+# Usage - dumpcerts.sh name-of-your-resolver /etc/traefik/acme.json /etc/ssl/
 #
 # Dependencies -
 #   util-linux
@@ -40,7 +40,7 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
-USAGE="$(basename "$0") <path to acme> <destination cert directory>"
+USAGE="$(basename "$0") <name-of-your-resolver> <path to acme> <destination cert directory>"
 
 # Platform variations
 case "$(uname)" in
@@ -72,7 +72,7 @@ ${USAGE}" >&2
 	exit 2
 }
 
-if [ $# -ne 2 ]; then
+if [ $# -ne 3 ]; then
 	echo "
 Insufficient number of parameters.
 
@@ -80,8 +80,9 @@ ${USAGE}" >&2
 	exit 1
 fi
 
-readonly acmefile="${1}"
-readonly certdir="${2%/}"
+readonly resolver="${1}"
+readonly acmefile="${2}"
+readonly certdir="${3%/}"
 
 if [ ! -r "${acmefile}" ]; then
 	echo "
@@ -104,7 +105,7 @@ fi
 
 jq=$(command -v jq) || exit_jq
 
-priv=$(${jq} -e -r '.Account.PrivateKey' "${acmefile}") || bad_acme
+priv=$(${jq} -e -r ".${resolver}"'.Account.PrivateKey' "${acmefile}") || bad_acme
 
 if [ ! -n "${priv}" ]; then
 	echo "
@@ -155,17 +156,17 @@ echo -e "-----BEGIN RSA PRIVATE KEY-----\n${priv}\n-----END RSA PRIVATE KEY-----
    | openssl rsa -inform pem -out "${pdir}/letsencrypt.key"
 
 # Process the certificates for each of the domains in acme.json
-domains=$(jq -r '.Certificates[].Domain.Main' ${acmefile}) || bad_acme
+domains=$(jq -r ".${resolver}"'.Certificates[].domain.main' ${acmefile}) || bad_acme
 for domain in $domains; do
 	# Traefik stores a cert bundle for each domain.  Within this cert
 	# bundle there is both proper the certificate and the Let's Encrypt CA
 	echo "Extracting cert bundle for ${domain}"
-	cert=$(jq -e -r --arg domain "$domain" '.Certificates[] |
-         	select (.Domain.Main == $domain )| .Certificate' ${acmefile}) || bad_acme
+	cert=$(jq -e -r --arg domain "$domain" ".${resolver}"'.Certificates[] |
+         	select (.domain.main == $domain )| .certificate' ${acmefile}) || bad_acme
 	echo "${cert}" | ${CMD_DECODE_BASE64} > "${cdir}/${domain}.crt"
 
 	echo "Extracting private key for ${domain}"
-	key=$(jq -e -r --arg domain "$domain" '.Certificates[] |
-		select (.Domain.Main == $domain )| .Key' ${acmefile}) || bad_acme
+	key=$(jq -e -r --arg domain "$domain" ".${resolver}"'.Certificates[] |
+		select (.domain.main == $domain )| .key' ${acmefile}) || bad_acme
 	echo "${key}" | ${CMD_DECODE_BASE64} > "${pdir}/${domain}.key"
 done
